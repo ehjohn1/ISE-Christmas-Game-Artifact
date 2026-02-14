@@ -11,159 +11,141 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("ISE: North Pole Protocol")
 
 # Colors
-WHITE = (255, 255, 255)
-GLOW_BLUE = (173, 216, 230)
-DARK_NAVY = (20, 20, 40)
-GRAY = (100, 100, 100)
-GOLD = (255, 215, 0)
+WHITE, GLOW_BLUE = (255, 255, 255), (173, 216, 230)
+DARK_NAVY, GOLD = (20, 20, 40), (255, 215, 0)
 
 # Fonts
 font_main = pygame.font.SysFont("Arial", 80, bold=True)
 font_sub = pygame.font.SysFont("Arial", 30)
 
 # Game States
-STATE_MENU = "MENU"
-STATE_STORY = "STORY"
-STATE_LEVEL_SELECT = "LEVEL_SELECT"
-STATE_GAME = "GAME"
-STATE_EASTER_EGG = "EASTER_EGG"
+STATE_MENU, STATE_STORY = "MENU", "STORY"
+STATE_TUTORIAL, STATE_LEVEL_SELECT = "TUTORIAL", "LEVEL_SELECT"
+STATE_GAME, STATE_EASTER_EGG = "GAME", "EASTER_EGG"
 
-# Progression Variables
+# Global Game Variables
 current_state = STATE_MENU
-unlocked_levels = 1  # Start with only Level 1 unlocked
-active_level = 1
+unlocked_levels = 0  # 0 means only Tutorial is available
+active_level = 0
+tutorial_step = 0 # 0: Move, 1: Shoot
 player_pos = [WIDTH // 2, HEIGHT // 2]
-particles = []
+particles, snowballs, enemies = [], [], []
+
+class Snowball:
+    def __init__(self, x, y, target_x, target_y):
+        self.pos = [x, y]
+        speed = 12
+        dx, dy = target_x - x, target_y - y
+        dist = (dx**2 + dy**2)**0.5
+        self.vel = [dx/dist * speed, dy/dist * speed] if dist != 0 else [speed, 0]
+
+    def update(self):
+        self.pos[0] += self.vel[0]
+        self.pos[1] += self.vel[1]
+
+class Enemy:
+    def __init__(self, x, y):
+        self.pos = [x, y]
+        self.rect = pygame.Rect(x, y, 40, 40)
+
+    def update(self):
+        self.rect.topleft = self.pos
 
 def draw_text(text, font, color, x, y):
     img = font.render(text, True, color)
     screen.blit(img, (x - img.get_width()//2, y))
 
+# --- State Functions ---
 def main_menu():
     screen.fill(DARK_NAVY)
     draw_text("NORTH POLE PROTOCOL", font_main, GLOW_BLUE, WIDTH//2, 150)
-    mouse = pygame.mouse.get_pos()
-    button_rect = pygame.Rect(WIDTH//2 - 125, 400, 250, 60)
-    color = (0, 200, 0) if button_rect.collidepoint(mouse) else (0, 150, 0)
-    pygame.draw.rect(screen, color, button_rect, border_radius=10)
+    rect = pygame.Rect(WIDTH//2 - 125, 400, 250, 60)
+    color = (0, 200, 0) if rect.collidepoint(pygame.mouse.get_pos()) else (0, 150, 0)
+    pygame.draw.rect(screen, color, rect, border_radius=10)
     draw_text("ENTER MISSION", font_sub, WHITE, WIDTH//2, 415)
-    return button_rect
+    return rect
 
-def story_screen():
-    screen.fill((0, 0, 0))
-    story_text = [
-        "The North Pole's automation has been hacked.",
-        "A rogue Elf has turned the toys into a robotic army.",
-        "Your mission: Stop the Glitch Elf and save Christmas.",
-        "",
-        "[ Press SPACE to View Missions ]"
-    ]
-    for i, line in enumerate(story_text):
-        draw_text(line, font_sub, WHITE, WIDTH//2, 200 + (i * 50))
+def tutorial_logic():
+    global tutorial_step, unlocked_levels, current_state
+    screen.fill((30, 50, 80))
+    
+    if tutorial_step == 0:
+        draw_text("STEP 1: USE 'WASD' TO MOVE", font_sub, WHITE, WIDTH//2, 100)
+        if player_pos[0] < 100 or player_pos[0] > WIDTH-100: tutorial_step = 1
+    elif tutorial_step == 1:
+        draw_text("STEP 2: LEFT CLICK TO SHOOT THE TARGET", font_sub, WHITE, WIDTH//2, 100)
+        if not enemies: enemies.append(Enemy(WIDTH-200, HEIGHT//2))
+        if not enemies: # Target hit
+            draw_text("BOOTCAMP COMPLETE! PRESS 'E' TO EXIT", font_sub, GOLD, WIDTH//2, 200)
 
 def level_select_screen():
     screen.fill(DARK_NAVY)
     draw_text("MISSION SELECTOR", font_main, GLOW_BLUE, WIDTH//2, 80)
     mouse = pygame.mouse.get_pos()
-    level_rects = []
-    
+    rects = []
     for i in range(1, 7):
-        # Grid Layout: 3 columns, 2 rows
-        col = (i-1) % 3
-        row = (i-1) // 3
-        x = 300 + (col * 350)
-        y = 300 + (row * 180)
-        
+        x, y = 300 + ((i-1)%3)*350, 300 + ((i-1)//3)*180
         rect = pygame.Rect(x-100, y, 200, 100)
         is_unlocked = i <= unlocked_levels
-        
-        if is_unlocked:
-            color = (0, 180, 0) if rect.collidepoint(mouse) else (0, 120, 0)
-        else:
-            color = (60, 60, 60) # Dark Gray for locked
-            
+        color = (0, 120, 0) if is_unlocked else (60, 60, 60)
         pygame.draw.rect(screen, color, rect, border_radius=15)
-        label = f"LEVEL {i}" if is_unlocked else "LOCKED"
-        draw_text(label, font_sub, WHITE, x, y + 35)
-        level_rects.append((rect, i))
-    
-    draw_text("[ PRESS 'C' TO DEBUG: UNLOCK NEXT LEVEL ]", font_sub, GOLD, WIDTH//2, 650)
-    return level_rects
+        draw_text(f"LEVEL {i}" if is_unlocked else "LOCKED", font_sub, WHITE, x, y+35)
+        rects.append((rect, i))
+    return rects
 
-def easter_egg_screen():
-    screen.fill((10, 50, 10)) # Christmas Green
-    draw_text("GLITCH ELF DEFEATED!", font_main, GOLD, WIDTH//2, 200)
-    draw_text("Christmas is safe... for now.", font_sub, WHITE, WIDTH//2, 350)
-    draw_text("PART 2: THE REVENGE - COMING CHRISTMAS 2026", font_sub, GLOW_BLUE, WIDTH//2, 450)
-    draw_text("[ Press ESC for Menu ]", font_sub, WHITE, WIDTH//2, 550)
-
+# --- Main Game Loop ---
 running = True
 while running:
+    screen.fill(DARK_NAVY)
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+        if event.type == pygame.QUIT: running = False
         
-        # Menu Transitions
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if current_state == STATE_MENU:
-                if main_menu().collidepoint(event.pos):
-                    current_state = STATE_STORY
-            
+            if current_state == STATE_MENU and main_menu().collidepoint(event.pos):
+                current_state = STATE_STORY
             elif current_state == STATE_LEVEL_SELECT:
-                for rect, lvl_num in level_select_screen():
-                    if rect.collidepoint(event.pos) and lvl_num <= unlocked_levels:
-                        active_level = lvl_num
-                        current_state = STATE_GAME
+                for r, l in level_select_screen():
+                    if r.collidepoint(event.pos) and l <= unlocked_levels:
+                        active_level, current_state = l, STATE_GAME
+            elif current_state in [STATE_TUTORIAL, STATE_GAME] and event.button == 1:
+                snowballs.append(Snowball(player_pos[0]+25, player_pos[1]+25, *event.pos))
 
         if event.type == pygame.KEYDOWN:
             if current_state == STATE_STORY and event.key == pygame.K_SPACE:
-                current_state = STATE_LEVEL_SELECT
-            
-            if current_state == STATE_LEVEL_SELECT and event.key == pygame.K_c:
-                if unlocked_levels < 6: unlocked_levels += 1 # Debug Unlock
-            
-            if event.key == pygame.K_ESCAPE:
-                current_state = STATE_MENU
+                current_state = STATE_TUTORIAL
+            if current_state == STATE_TUTORIAL and event.key == pygame.K_e and tutorial_step == 1 and not enemies:
+                unlocked_levels, current_state = 1, STATE_LEVEL_SELECT
 
-    # State Rendering
-    if current_state == STATE_MENU:
-        main_menu()
+    # Rendering States
+    if current_state == STATE_MENU: main_menu()
     elif current_state == STATE_STORY:
-        story_screen()
-    elif current_state == STATE_LEVEL_SELECT:
-        level_select_screen()
-    elif current_state == STATE_EASTER_EGG:
-        easter_egg_screen()
+        screen.fill((0,0,0))
+        draw_text("MISSION: ELF BOOTCAMP", font_main, GLOW_BLUE, WIDTH//2, 200)
+        draw_text("[ Press SPACE to Start Training ]", font_sub, WHITE, WIDTH//2, 400)
+    elif current_state == STATE_TUTORIAL:
+        tutorial_logic()
+        # Draw Player/Snowballs in tutorial
+        pygame.draw.rect(screen, (0, 255, 0), (player_pos[0], player_pos[1], 50, 50))
+        for s in snowballs[:]:
+            s.update()
+            pygame.draw.circle(screen, WHITE, (int(s.pos[0]), int(s.pos[1])), 8)
+        for e in enemies[:]:
+            pygame.draw.rect(screen, RED, e.rect)
+            for s in snowballs[:]:
+                if e.rect.collidepoint(s.pos):
+                    enemies.remove(e); snowballs.remove(s)
+    elif current_state == STATE_LEVEL_SELECT: level_select_screen()
     elif current_state == STATE_GAME:
-        screen.fill(DARK_NAVY)
-        draw_text(f"PLAYING: MISSION {active_level}", font_sub, WHITE, WIDTH//2, 30)
-        
-        # Movement
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_w]: player_pos[1] -= 5
-        if keys[pygame.K_s]: player_pos[1] += 5
-        if keys[pygame.K_a]: player_pos[0] -= 5
-        if keys[pygame.K_d]: player_pos[0] += 5
-
-        # Effects & Player
-        particles.append([[player_pos[0] + 25, player_pos[1] + 25], [random.randint(-2, 2), random.randint(-2, 2)], 5])
-        for p in particles:
-            p[0][0] += p[1][0]; p[0][1] += p[1][1]; p[2] -= 0.1
-            pygame.draw.circle(screen, GLOW_BLUE, [int(p[0][0]), int(p[0][1])], int(p[2]))
-        particles = [p for p in particles if p[2] > 0]
+        draw_text(f"MISSION {active_level} ACTIVE", font_sub, WHITE, WIDTH//2, 50)
         pygame.draw.rect(screen, (0, 255, 0), (player_pos[0], player_pos[1], 50, 50))
 
-        # Completion Mockup: If player reaches right edge, unlock next
-        if player_pos[0] > WIDTH - 60:
-            if active_level == 6:
-                current_state = STATE_EASTER_EGG
-            else:
-                if active_level == unlocked_levels:
-                    unlocked_levels += 1
-                current_state = STATE_LEVEL_SELECT
-                player_pos = [WIDTH // 2, HEIGHT // 2] # Reset pos
+    # Basic WASD Movement
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_w]: player_pos[1] -= 5
+    if keys[pygame.K_s]: player_pos[1] += 5
+    if keys[pygame.K_a]: player_pos[0] -= 5
+    if keys[pygame.K_d]: player_pos[0] += 5
 
     pygame.display.flip()
     pygame.time.Clock().tick(60)
-
 pygame.quit()
