@@ -2,6 +2,7 @@ import pygame
 import random
 import sys
 import math
+import os
 
 # Initialize Pygame
 pygame.init()
@@ -10,6 +11,35 @@ pygame.init()
 WIDTH, HEIGHT = 1280, 720
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("ISE: North Pole Protocol")
+
+# ============================
+# BACKGROUND IMAGES (ASSETS)
+# ============================
+# Works whether main.py is in project root OR inside /src
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(_THIS_DIR) if os.path.basename(_THIS_DIR).lower() == "src" else _THIS_DIR
+SPRITES_DIR = os.path.join(BASE_DIR, "assets", "sprites")
+
+def load_bg(filename):
+    path = os.path.join(SPRITES_DIR, filename)
+    img = pygame.image.load(path).convert()
+    return pygame.transform.scale(img, (WIDTH, HEIGHT))
+
+# --- Load your backgrounds (use your exact filenames) ---
+bg_menu = load_bg("bg_1_menu.png")
+bg_story = load_bg("bg_2_story.png")
+bg_levelselect = load_bg("bg_3_level.png")
+bg_gameover = load_bg("bg_4_gameover.png")
+bg_victory = load_bg("bg_5_victory.png")
+
+bg_levels = {
+    1: load_bg("bg_level1_slimes.png"),
+    2: load_bg("bg_level2_mailroom.png"),
+    3: load_bg("bg_level3_robotarmy.png"),
+    4: load_bg("bg_level4_wrappingstation.png"),
+    5: load_bg("bg_level5_engineroom.png"),
+    6: load_bg("bg_level6_mainvault.png"),
+}
 
 # Colors
 WHITE, GOLD = (255, 255, 255), (255, 215, 0)
@@ -146,9 +176,28 @@ class Enemy:
         self.rect.topleft = (self.pos[0], self.pos[1])
 
 
+# ============================
+# TEXT VISIBILITY HELPERS
+# ============================
 def draw_text(text, font, color, x, y):
-    img = font.render(text, True, color);
+    img = font.render(text, True, color)
     screen.blit(img, (x - img.get_width() // 2, y))
+
+def draw_text_panel(text, font, color, x, y, padding=10, panel_alpha=160, roundness=10):
+    """
+    Draw text with a semi-transparent dark panel behind it (best readability on any background).
+    """
+    text_surface = font.render(text, True, color).convert_alpha()
+    rect = text_surface.get_rect(midtop=(x, y))
+
+    panel = pygame.Surface((rect.width + padding * 2, rect.height + padding * 2), pygame.SRCALPHA)
+    panel.fill((0, 0, 0, panel_alpha))
+
+    # Rounded corners (optional)
+    pygame.draw.rect(panel, (0, 0, 0, panel_alpha), panel.get_rect(), border_radius=roundness)
+
+    screen.blit(panel, (rect.x - padding, rect.y - padding))
+    screen.blit(text_surface, rect.topleft)
 
 
 def reset_game():
@@ -165,7 +214,22 @@ def reset_game():
 # --- Main Game Loop ---
 running, clock = True, pygame.time.Clock()
 while running:
-    screen.fill(DARK_NAVY)
+    # Background per state (replaces screen.fill)
+    if current_state == STATE_MENU:
+        screen.blit(bg_menu, (0, 0))
+    elif current_state == STATE_STORY:
+        screen.blit(bg_story, (0, 0))
+    elif current_state == STATE_LEVEL_SELECT:
+        screen.blit(bg_levelselect, (0, 0))
+    elif current_state == STATE_GAME_OVER:
+        screen.blit(bg_gameover, (0, 0))
+    elif current_state == STATE_VICTORY:
+        screen.blit(bg_victory, (0, 0))
+    elif current_state in [STATE_TUTORIAL, STATE_GAME, STATE_CUTSCENE]:
+        screen.blit(bg_levels.get(active_level, bg_menu), (0, 0))
+    else:
+        screen.blit(bg_menu, (0, 0))
+
     mx, my = pygame.mouse.get_pos()
 
     for event in pygame.event.get():
@@ -278,12 +342,12 @@ while running:
             player_rect = pygame.Rect(player_pos[0], player_pos[1], 50, 50)
             # Phase 1: Hunt minions
             if score < 10:
-                draw_text(f"SCORE: {score}/10 TO UNLOCK FLAMETHROWER", font_instr, WHITE, WIDTH // 2, 100)
+                draw_text_panel(f"SCORE: {score}/10 TO UNLOCK FLAMETHROWER", font_instr, WHITE, WIDTH // 2, 100)
             # Phase 2: Item spawns
             elif score >= 10 and not flamethrower_unlocked:
                 flame_item = pygame.Rect(WIDTH // 2 - 25, HEIGHT // 2 - 25, 50, 50)
                 pygame.draw.rect(screen, ORANGE, flame_item)
-                draw_text("COLLECT THE FLAMETHROWER!", font_instr, GOLD, WIDTH // 2, HEIGHT // 2 - 60)
+                draw_text_panel("COLLECT THE FLAMETHROWER!", font_instr, GOLD, WIDTH // 2, HEIGHT // 2 - 60)
                 if player_rect.colliderect(flame_item):
                     flamethrower_unlocked = True
                     flamethrower_active = True
@@ -294,7 +358,7 @@ while running:
             if flamethrower_unlocked and enemies:
                 pygame.draw.rect(screen, RED, (WIDTH // 2 - 250, 20, 500, 25))
                 pygame.draw.rect(screen, GREEN, (WIDTH // 2 - 250, 20, enemies[0].hp * 10, 25))
-                draw_text("ROBOTIC NUTCRACKER", font_instr, WHITE, WIDTH // 2, 55)
+                draw_text_panel("ROBOTIC NUTCRACKER", font_instr, WHITE, WIDTH // 2, 55)
                 # Rapid rockets
                 rocket_timer += 1
                 if rocket_timer > 60:
@@ -389,53 +453,54 @@ while running:
             p[0][1] += p[1][1];
             pygame.draw.circle(screen, WHITE, (int(p[0][0]), int(p[0][1])), int(p[2]))
             if p[0][1] > HEIGHT: particles.remove(p)
-        draw_text("NORTH POLE PROTOCOL", font_main, GLOW_BLUE, WIDTH // 2, 150)
-        draw_text("SYSTEM STATUS: COMPROMISED", font_instr, RED, WIDTH // 2, 220)
-        draw_text("OBJECTIVE: RESTORE THE SPIRIT OF CHRISTMAS ENERGY", font_instr, GOLD, WIDTH // 2, 250)
+        draw_text_panel("NORTH POLE PROTOCOL", font_main, GLOW_BLUE, WIDTH // 2, 150, padding=14, panel_alpha=170)
+        draw_text_panel("SYSTEM STATUS: COMPROMISED", font_instr, RED, WIDTH // 2, 220, padding=10, panel_alpha=170)
+        draw_text_panel("OBJECTIVE: RESTORE THE SPIRIT OF CHRISTMAS ENERGY", font_instr, GOLD, WIDTH // 2, 250, padding=10, panel_alpha=170)
         btn_rect = pygame.Rect(WIDTH // 2 - 150, 400, 300, 70);
         btn_color = (0, 255, 0) if btn_rect.collidepoint(mx, my) else (0, 200, 0)
         pygame.draw.rect(screen, btn_color, btn_rect, border_radius=15)
         if btn_rect.collidepoint(mx, my): pygame.draw.rect(screen, WHITE, btn_rect, 3, border_radius=15)
-        draw_text("INITIALIZE MISSION", font_story, DARK_NAVY, WIDTH // 2, 432)
-        draw_text("v1.0.4 - SECURE CONNECTION ACTIVE", font_instr, GRAY, WIDTH // 2, 680)
+        draw_text_panel("INITIALIZE MISSION", font_story, DARK_NAVY, WIDTH // 2, 432, padding=8, panel_alpha=120)
+        draw_text_panel("v1.0.4 - SECURE CONNECTION ACTIVE", font_instr, GRAY, WIDTH // 2, 680, padding=8, panel_alpha=140)
 
     elif current_state == STATE_STORY:
-        draw_text("THE NORTH POLE HAS BEEN HACKED BY A ROGUE ELF.", font_story, WHITE, WIDTH // 2, 250)
-        draw_text("[ PRESS SPACE TO START ELF BOOTCAMP ]", font_story, GOLD, WIDTH // 2, 450)
+        draw_text_panel("THE NORTH POLE HAS BEEN HACKED BY A ROGUE ELF.", font_story, WHITE, WIDTH // 2, 250, padding=12, panel_alpha=170)
+        draw_text_panel("[ PRESS SPACE TO START ELF BOOTCAMP ]", font_story, GOLD, WIDTH // 2, 450, padding=12, panel_alpha=170)
 
     elif current_state == STATE_TUTORIAL:
-        draw_text("ELF BOOTCAMP: TARGET PRACTICE", font_instr, WHITE, WIDTH // 2, 50)
-        draw_text("INSTRUCTIONS: USE 'WASD' TO MOVE | CLICK TO SHOOT TARGET", font_instr, WHITE, WIDTH // 2, 650)
-        if not enemies: draw_text("BOOTCAMP COMPLETE! PRESS 'E' TO EXIT", font_story, GOLD, WIDTH // 2, HEIGHT // 2)
+        draw_text_panel("ELF BOOTCAMP: TARGET PRACTICE", font_instr, WHITE, WIDTH // 2, 50, padding=10, panel_alpha=170)
+        draw_text_panel("INSTRUCTIONS: USE 'WASD' TO MOVE | CLICK TO SHOOT TARGET", font_instr, WHITE, WIDTH // 2, 650, padding=10, panel_alpha=170)
+        if not enemies:
+            draw_text_panel("BOOTCAMP COMPLETE! PRESS 'E' TO EXIT", font_story, GOLD, WIDTH // 2, HEIGHT // 2, padding=12, panel_alpha=170)
 
     elif current_state == STATE_CUTSCENE:
-        screen.fill((5, 15, 5))
+        # (Removed screen.fill here so the cutscene uses your background + scanlines overlay)
         for i in range(0, HEIGHT, 4): pygame.draw.line(screen, (0, 20, 0), (0, i), (WIDTH, i))
-        draw_text(mission_data[active_level]["story"][story_index], font_story, WHITE, WIDTH // 2, 330)
-        draw_text("[ PRESS SPACE TO CONTINUE ]", font_instr, GOLD, WIDTH // 2, 600)
+        draw_text_panel(mission_data[active_level]["story"][story_index], font_story, WHITE, WIDTH // 2, 330, padding=14, panel_alpha=175)
+        draw_text_panel("[ PRESS SPACE TO CONTINUE ]", font_instr, GOLD, WIDTH // 2, 600, padding=12, panel_alpha=175)
 
     elif current_state == STATE_LEVEL_SELECT:
-        draw_text("MISSION SELECTOR", font_main, GLOW_BLUE, WIDTH // 2, 80)
+        draw_text_panel("MISSION SELECTOR", font_main, GLOW_BLUE, WIDTH // 2, 80, padding=14, panel_alpha=170)
         for i in range(1, 7):
             col, row = (i - 1) % 3, (i - 1) // 3;
             color = GREEN if i <= unlocked_levels else GRAY
             pygame.draw.rect(screen, color, (300 + (col * 350) - 100, 300 + (row * 180), 200, 100), border_radius=15)
-            draw_text(f"LEVEL {i}" if i <= unlocked_levels else "LOCKED", font_story, WHITE, 300 + (col * 350),
-                      300 + (row * 180) + 35)
+            draw_text_panel(f"LEVEL {i}" if i <= unlocked_levels else "LOCKED", font_story, WHITE, 300 + (col * 350),
+                            300 + (row * 180) + 35, padding=8, panel_alpha=150)
 
     elif current_state == STATE_GAME_OVER:
-        draw_text("MISSION COMPROMISED", font_main, RED, WIDTH // 2, 200)
+        draw_text_panel("MISSION COMPROMISED", font_main, RED, WIDTH // 2, 200, padding=14, panel_alpha=180)
         opts = [("RESTART", 350), ("LEVEL SELECT", 420), ("HOME", 490)]
         for text, y in opts:
             r = pygame.Rect(WIDTH // 2 - 100, y, 200, 50);
             pygame.draw.rect(screen, (150, 150, 150) if r.collidepoint(mx, my) else GRAY, r, border_radius=10)
-            draw_text(text, font_instr, WHITE, WIDTH // 2, y + 12)
+            draw_text_panel(text, font_instr, WHITE, WIDTH // 2, y + 12, padding=6, panel_alpha=140)
 
     elif current_state == STATE_VICTORY:
         # Victory Page Logic
-        draw_text("MISSION ACCOMPLISHED", font_main, GOLD, WIDTH // 2, 200)
-        draw_text("THE HACK HAS BEEN PURGED. THE NORTH POLE IS SAFE!", font_story, WHITE, WIDTH // 2, 300)
-        draw_text("YOU ARE THE ULTIMATE GUARDIAN ELF.", font_instr, GREEN, WIDTH // 2, 360)
+        draw_text_panel("MISSION ACCOMPLISHED", font_main, GOLD, WIDTH // 2, 200, padding=14, panel_alpha=170)
+        draw_text_panel("THE HACK HAS BEEN PURGED. THE NORTH POLE IS SAFE!", font_story, WHITE, WIDTH // 2, 300, padding=12, panel_alpha=170)
+        draw_text_panel("YOU ARE THE ULTIMATE GUARDIAN ELF.", font_instr, GREEN, WIDTH // 2, 360, padding=12, panel_alpha=170)
 
         # Christmas Spirit Particles (rising up)
         for _ in range(2):
@@ -443,14 +508,27 @@ while running:
 
         v_btn = pygame.Rect(WIDTH // 2 - 100, 500, 200, 60)
         pygame.draw.rect(screen, GOLD if v_btn.collidepoint(mx, my) else GREEN, v_btn, border_radius=15)
-        draw_text("MAIN MENU", font_instr, DARK_NAVY, WIDTH // 2, 518)
+        draw_text_panel("MAIN MENU", font_instr, DARK_NAVY, WIDTH // 2, 518, padding=8, panel_alpha=120)
 
     elif current_state == STATE_GAME:
-        draw_text(mission_data[active_level]["instructions"], font_instr, GOLD, WIDTH // 2, 680)
+        # Bottom info bar for readability
+        info_bar = pygame.Surface((WIDTH, 80), pygame.SRCALPHA)
+        info_bar.fill((0, 0, 0, 150))
+        screen.blit(info_bar, (0, HEIGHT - 80))
+
+        # HUD panel (top-left)
+        hud_panel = pygame.Surface((560, 46), pygame.SRCALPHA)
+        hud_panel.fill((0, 0, 0, 150))
+        screen.blit(hud_panel, (10, 10))
+
+        draw_text_panel(mission_data[active_level]["instructions"], font_instr, GOLD, WIDTH // 2, 680, padding=10, panel_alpha=0)  # uses bar behind
+        # keep your original x=250, y=30 style (but visible now with hud panel)
         draw_text(f"HP: {int(health)} | STAMINA: {int(stamina)} | SCORE: {score}/10", font_instr, WHITE, 250, 30)
 
-    for s in snowballs: s.update(); pygame.draw.circle(screen, ORANGE if s.is_flame else WHITE,
-                                                       (int(s.pos[0]), int(s.pos[1])), 8)
+    for s in snowballs:
+        s.update()
+        pygame.draw.circle(screen, ORANGE if s.is_flame else WHITE, (int(s.pos[0]), int(s.pos[1])), 8)
+
     for p in particles[:]:
         if current_state != STATE_MENU:
             p[0][0] += p[1][0];
